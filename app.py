@@ -575,17 +575,25 @@ def handle_compare(n, a, b):
         return html.Div(f'Error: {str(e)[:100]}', className='empty-state')
 
     # parse the structured output into sections
+    import re
     sections = {'a_wins': [], 'b_wins': [], 'verdict': ''}
     current = None
     for line in result.splitlines():
-        l = line.strip().lstrip('*').rstrip('*').strip()
-        if not l: continue
-        low = l.lower()
-        if 'where a wins' in low: current = 'a_wins'; continue
-        if 'where b wins' in low: current = 'b_wins'; continue
-        if 'verdict' in low and len(l) < 30: current = 'verdict'; continue
-        # strip leading numbers/bullets
-        cleaned = l.lstrip('0123456789.-) ').strip()
+        raw = line.strip()
+        if not raw: continue
+        # strip markdown wrappers and inline asterisks around section headers
+        header_check = re.sub(r'[*:]+', '', raw).strip().lower()
+        if 'where a wins' in header_check: current = 'a_wins'; continue
+        if 'where b wins' in header_check: current = 'b_wins'; continue
+        if header_check.startswith('verdict') or 'verdict' == header_check:
+            current = 'verdict'
+            # capture any text on same line after "Verdict:"
+            inline = re.sub(r'^\s*\**\s*verdict\s*:?\s*\**\s*', '', raw, flags=re.IGNORECASE).strip()
+            if inline:
+                sections['verdict'] = inline
+            continue
+        # strip leading numbering/bullets + wrapping ** but keep inline **bold**
+        cleaned = re.sub(r'^\s*[\d*\-.)\s]+', '', raw).strip()
         if current == 'verdict':
             sections['verdict'] += (' ' if sections['verdict'] else '') + cleaned
         elif current and cleaned:
