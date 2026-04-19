@@ -25,12 +25,6 @@ Ask natural-language questions, get grounded answers with cited sources, drill i
 3. [Tech stack](#tech-stack)
 4. [Project structure](#project-structure)
 5. [Step-by-step build](#step-by-step-build)
-   - [Phase 1 — Data ingestion](#phase-1--data-ingestion)
-   - [Phase 2 — Cleaning and sentiment](#phase-2--cleaning-and-sentiment)
-   - [Phase 3 — Embeddings and vector search](#phase-3--embeddings-and-vector-search)
-   - [Phase 4 — RAG pipeline](#phase-4--rag-pipeline)
-   - [Phase 5 — Dashboard UI](#phase-5--dashboard-ui)
-   - [Phase 6 — Deployment](#phase-6--deployment)
 6. [Running locally](#running-locally)
 7. [What I'd do differently](#what-id-do-differently)
 8. [Dataset and credits](#dataset-and-credits)
@@ -53,6 +47,8 @@ Plus a proper analytics dashboard showing sentiment trends over ~15 years, price
 ---
 
 ## Architecture
+
+```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        DATA LAYER                               │
 │   Amazon Reviews 2023 (HuggingFace) → Databricks Notebook       │
@@ -62,14 +58,14 @@ Plus a proper analytics dashboard showing sentiment trends over ~15 years, price
 │   • Sentiment derived from star rating                          │
 │   • Saved as parquet                                            │
 └─────────────────────────────────────────────────────────────────┘
-↓
+                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
 │                     EMBEDDING LAYER                             │
 │   SentenceTransformer all-MiniLM-L6-v2                          │
 │   → 384-dim normalized vectors                                  │
 │   → FAISS IndexFlatIP (inner product = cosine similarity)       │
 └─────────────────────────────────────────────────────────────────┘
-↓
+                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
 │                       RAG PIPELINE                              │
 │   1. Query rewriter (GPT-4o-mini)                               │
@@ -81,7 +77,7 @@ Plus a proper analytics dashboard showing sentiment trends over ~15 years, price
 │   4. Grounded generation (GPT-4o-mini)                          │
 │      answer with inline citations                               │
 └─────────────────────────────────────────────────────────────────┘
-↓
+                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
 │                         UI LAYER                                │
 │   Plotly Dash — single-page app                                 │
@@ -90,7 +86,7 @@ Plus a proper analytics dashboard showing sentiment trends over ~15 years, price
 │   • Interactive chat, modals, comparison cards                  │
 │   • Plotly charts with custom theme                             │
 └─────────────────────────────────────────────────────────────────┘
-↓
+                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
 │                        DEPLOYMENT                               │
 │   HuggingFace Spaces (Docker runtime)                           │
@@ -98,6 +94,7 @@ Plus a proper analytics dashboard showing sentiment trends over ~15 years, price
 │   • Git LFS for large parquet / FAISS files (~180 MB)           │
 │   • OPENAI_API_KEY stored as a Space secret                     │
 └─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -119,6 +116,8 @@ Plus a proper analytics dashboard showing sentiment trends over ~15 years, price
 ---
 
 ## Project structure
+
+```
 amazon_dashboard/
 ├── app.py              # Layout + callbacks — the glue
 ├── config.py           # Colors, constants, social links
@@ -140,6 +139,7 @@ amazon_dashboard/
 ├── .env                # OPENAI_API_KEY (gitignored)
 ├── .gitignore
 └── .gitattributes      # Git LFS config for *.parquet / *.faiss
+```
 
 ---
 
@@ -329,7 +329,7 @@ MIT — feel free to use the code, architecture, or approach for your own projec
 
 ## Contact
 
-**Archit Bhujang** · Computer Science @ Arizona State University
+**Archit Bhujang** · Computer Systems Engineering (Cybersecurity) @ Arizona State University
 
 - 🔗 LinkedIn: [archit-bhujang](https://www.linkedin.com/in/archit-bhujang-840b63217/)
 - 💻 GitHub: [BhujArc24](https://github.com/BhujArc24)
