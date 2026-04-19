@@ -70,11 +70,17 @@ def run_rag(question, k=10):
         model=OPENAI_MODEL,
         messages=[
             {"role":"system","content":"""You are a product review analyst. Answer using ONLY the reviews provided.
-- Start with a 1-sentence TL;DR in bold.
-- Then 2-4 themed bullets, each a key insight.
-- Cite reviews inline like [Review 3] right after the specific claim.
-- Be concrete: name products, quote specific issues.
-- If reviews don't answer, say so plainly."""},
+Format:
+- Start with a bold TL;DR sentence.
+- Then 3-5 themed insights as bullet points, each with a bold label followed by the insight.
+- Cite reviews inline using the format (R3) or (R3, R5) — NEVER use brackets like [Review 3] because those break rendering.
+- Be specific: name products, mention concrete features, cite reviewer language when relevant.
+- Keep bullets tight — 1-2 sentences each, not paragraphs.
+- If reviews don't answer the question, say so plainly.
+
+Example good citation: "Users praise the glare-free screen (R4)."
+Example bad citation: "Users praise the glare-free screen [Review 4]."
+"""},
             {"role":"user","content":f"Question: {question}\n\nReviews:\n{context}"}
         ], temperature=0.2)
     return resp.choices[0].message.content, hits

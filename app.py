@@ -335,12 +335,15 @@ def handle_chat(send_c, submit_c, s1, s2, s3, input_val, history):
         body.append(html.Div(className='msg msg-user', children=html.Div(turn['q'], className='bubble')))
         ai_children = [dcc.Markdown(turn['a'], className='bubble bubble-md')]
         for s in turn['sources']:
-            ai_children.append(html.Div(className='source-card', children=[
-                html.Div(className='source-head', children=[
+            full_text = s['text']
+            preview = full_text[:220] + ('…' if len(full_text)>220 else '')
+            ai_children.append(html.Details(className='source-card', children=[
+                html.Summary(className='source-head', children=[
                     html.Div(s['product_title'][:60], className='source-product'),
                     html.Div(f"{s['rating']}/5 ★", className='source-rating'),
                 ]),
-                html.Div(s['text'][:220] + ('...' if len(s['text'])>220 else '')),
+                html.Div(preview, className='source-preview'),
+                html.Div(full_text, className='source-full'),
             ]))
         body.append(html.Div(className='msg msg-ai', children=ai_children))
     return body, history, ''
