@@ -163,9 +163,9 @@ app.layout = html.Div([
                             html.Div('Click any product for a deep-dive', className='panel-sub'),
                         ]),
                     ]),
-                    html.Div(className='product-list', children=[
+                    dcc.Loading(type='circle', color='#FF9900', children=html.Div(className='product-list', children=[
                         product_row(r, i) for i, (_, r) in enumerate(TOP_40.iterrows())
-                    ]),
+                    ])),
                 ]),
             ]),
         ]),
@@ -198,12 +198,12 @@ app.layout = html.Div([
                 html.Button('Compare', id='cmp-send', n_clicks=0,
                             style={'background':'linear-gradient(135deg,#FF9900,#FFAC33)','color':'#0F1419','border':'none',
                                    'borderRadius':'12px','padding':'12px 22px','fontWeight':'700','fontSize':'13px','cursor':'pointer','marginBottom':'16px'}),
-                html.Div(id='cmp-output', children=[
+                dcc.Loading(type='dot', color='#FF9900', children=html.Div(id='cmp-output', children=[
                     html.Div(className='empty-state', children=[
                         html.H3('Pick two products'),
                         html.P('Get an AI-generated head-to-head based on what reviewers actually say.'),
                     ]),
-                ]),
+                ])),
             ]),
         ]),
 
@@ -220,12 +220,12 @@ app.layout = html.Div([
                             html.Div('RAG over 50K reviews · GPT-4o-mini · query rewriting enabled', className='chat-sub'),
                         ]),
                     ]),
-                    html.Div(id='chat-body', className='chat-body', children=[
+                    dcc.Loading(type='dot', color='#FF9900', parent_className='chat-body-wrap', children=html.Div(id='chat-body', className='chat-body', children=[
                         html.Div(className='empty-state', children=[
                             html.H3('What do customers think?'),
                             html.P('Ask a question and I\'ll answer using real reviews as evidence.'),
                         ]),
-                    ]),
+                    ])),
                     html.Div(className='suggestions', children=[
                         html.Div('Common complaints about battery life?', className='suggestion', id='sug-1', n_clicks=0),
                         html.Div('What do people love about Kindle?', className='suggestion', id='sug-2', n_clicks=0),
@@ -260,12 +260,12 @@ app.layout = html.Div([
                                 style={'background':'linear-gradient(135deg,#FF9900,#FFAC33)','color':'#0F1419','border':'none',
                                        'borderRadius':'12px','padding':'0 20px','fontWeight':'700','fontSize':'13px','cursor':'pointer'}),
                 ]),
-                html.Div(id='pc-output', children=[
+                dcc.Loading(type='dot', color='#FF9900', children=html.Div(id='pc-output', children=[
                     html.Div(className='empty-state', children=[
                         html.H3('Pick any category'),
                         html.P('Get the top 3 pros and top 3 cons, extracted from reviews.'),
                     ]),
-                ]),
+                ])),
             ]),
         ]),
 
@@ -449,9 +449,20 @@ def open_product_modal(product_clicks, close_c):
             html.Div(r['text'][:400] + ('...' if len(r['text'])>400 else '')),
         ])
 
-    body = [
+    # get image for this product
+    img_row = df_emb[df_emb['product_title']==title].iloc[0]
+    img_url = img_row.get('image_url') if 'image_url' in img_row.index else None
+
+    head_children = []
+    if img_url and isinstance(img_url, str):
+        head_children.append(html.Img(src=img_url, className='modal-hero-img'))
+    head_children.append(html.Div([
         html.Div(title, className='modal-title'),
         html.Div(f"{n:,} reviews analyzed", className='modal-sub'),
+    ], style={'flex':'1'}))
+
+    body = [
+        html.Div(className='modal-hero', children=head_children),
 
         html.Div(className='modal-stats', children=[
             html.Div(className='modal-stat', children=[
@@ -580,10 +591,24 @@ def handle_compare(n, a, b):
         elif current and cleaned:
             sections[current].append(cleaned)
 
+    def get_img(product_title):
+        sub = df_emb[df_emb['product_title']==product_title]
+        if len(sub) == 0: return None
+        url = sub.iloc[0].get('image_url') if 'image_url' in sub.columns else None
+        return url if isinstance(url, str) else None
+
     def wins_col(label, product, items, accent_class):
-        return html.Div(className=f'cmp-col {accent_class}', children=[
+        img_url = get_img(product)
+        header_children = []
+        if img_url:
+            header_children.append(html.Img(src=img_url, className='cmp-product-img'))
+        header_children.append(html.Div([
             html.Div(label, className='cmp-col-label'),
             html.Div(product[:60], className='cmp-col-product'),
+        ], style={'flex':'1'}))
+
+        return html.Div(className=f'cmp-col {accent_class}', children=[
+            html.Div(className='cmp-col-header', children=header_children),
             html.Div(className='cmp-items', children=[
                 html.Div(className='cmp-item', children=[
                     html.Div(className='cmp-item-num', children=str(i+1)),

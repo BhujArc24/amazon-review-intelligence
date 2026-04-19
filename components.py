@@ -23,12 +23,18 @@ def section_head(kicker, title, sub):
 
 def product_row(r, idx):
     pos = r['pos_pct']; neg = r['neg_pct']; neu = 1-pos-neg
+    img_url = r.get('image_url') if hasattr(r, 'get') else r['image_url'] if 'image_url' in r.index else None
+
+    img_el = html.Img(src=img_url, className='product-thumb') if img_url and isinstance(img_url, str) else \
+             html.Div('📦', className='product-thumb product-thumb-fallback')
+
     return html.Div(
         className='product-row',
         id={'type':'product-click','index':idx},
         n_clicks=0,
         children=[
-            html.Div([
+            img_el,
+            html.Div(className='product-info', children=[
                 html.Div(r['product_title'][:80], className='product-name'),
                 html.Div([
                     html.Span(f"{int(r['review_count'])} reviews"),
