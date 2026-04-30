@@ -48,53 +48,155 @@ Plus a proper analytics dashboard showing sentiment trends over ~15 years, price
 
 ## Architecture
 
+The system has three runtime planes — an offline data pipeline that runs once in Databricks, a request-time RAG pipeline triggered by user interactions, and a presentation layer rendered in the browser. Below is the full component-level breakdown with the actual flow paths.
+
+### High-level system
+
+```mermaid
+flowchart LR
+    subgraph DBX["🗄️ Offline Pipeline (Databricks)"]
+        direction TB
+        HF1["HuggingFace<br/>Amazon Reviews 2023<br/>raw_review_Electronics"]
+        HF2["HuggingFace<br/>raw_meta_Electronics<br/>(streamed + filtered)"]
+        CLEAN["Cleaning<br/>• dedupe<br/>• date parse<br/>• English filter<br/>• sentiment from rating"]
+        EMBED["Encode<br/>all-MiniLM-L6-v2<br/>384-dim, normalized"]
+        FAISS_BUILD["Build FAISS index<br/>IndexFlatIP"]
+        AGG["Pre-aggregate<br/>• daily counts<br/>• price brackets<br/>• top products"]
+        ARTIFACTS[("📦 Artifacts<br/>(parquet + .faiss)")]
+    end
+
+    subgraph DEPLOY["🚀 Deployment"]
+        GH["GitHub<br/>(code + Git LFS)"]
+        HFS["HuggingFace Space<br/>Docker runtime<br/>16 GB RAM, CPU"]
+        SECRET["Space Secret<br/>OPENAI_API_KEY"]
+    end
+
+    subgraph RUN["⚡ Runtime (per request)"]
+        direction TB
+        UI["Browser<br/>Plotly Dash UI"]
+        LOADER["data_loader.py<br/>(load once at boot)"]
+        RAG["rag.py<br/>RAG pipeline"]
+        OAI["OpenAI API<br/>gpt-4o-mini"]
+    end
+
+    HF1 --> CLEAN
+    HF2 --> CLEAN
+    CLEAN --> EMBED --> FAISS_BUILD --> ARTIFACTS
+    CLEAN --> AGG --> ARTIFACTS
+
+    ARTIFACTS -. "downloaded locally,<br/>committed via Git LFS" .-> GH
+    GH --> HFS
+    SECRET --> HFS
+
+    HFS --> LOADER
+    LOADER --> RAG
+    UI <--> RAG
+    RAG <--> OAI
+
+    style DBX fill:#1a2332,stroke:#FF9900,color:#fff
+    style DEPLOY fill:#1a2332,stroke:#F5C518,color:#fff
+    style RUN fill:#1a2332,stroke:#00A862,color:#fff
+    style ARTIFACTS fill:#FF9900,color:#000
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        DATA LAYER                               │
-│   Amazon Reviews 2023 (HuggingFace) → Databricks Notebook       │
-│   • 100K Electronics reviews streamed                           │
-│   • Joined with product metadata (title, price, brand, images)  │
-│   • Cleaned: deduped, date-parsed, English-filtered             │
-│   • Sentiment derived from star rating                          │
-│   • Saved as parquet                                            │
-└─────────────────────────────────────────────────────────────────┘
-                               ↓
-┌─────────────────────────────────────────────────────────────────┐
-│                     EMBEDDING LAYER                             │
-│   SentenceTransformer all-MiniLM-L6-v2                          │
-│   → 384-dim normalized vectors                                  │
-│   → FAISS IndexFlatIP (inner product = cosine similarity)       │
-└─────────────────────────────────────────────────────────────────┘
-                               ↓
-┌─────────────────────────────────────────────────────────────────┐
-│                       RAG PIPELINE                              │
-│   1. Query rewriter (GPT-4o-mini)                               │
-│      user question → search queries + sentiment + product hint  │
-│   2. Multi-query retrieval                                      │
-│      dense vector search, merged & re-ranked                    │
-│   3. Metadata filters                                           │
-│      sentiment / product title                                  │
-│   4. Grounded generation (GPT-4o-mini)                          │
-│      answer with inline citations                               │
-└─────────────────────────────────────────────────────────────────┘
-                               ↓
-┌─────────────────────────────────────────────────────────────────┐
-│                         UI LAYER                                │
-│   Plotly Dash — single-page app                                 │
-│   • Sticky-nav, scroll-reveal sections                          │
-│   • Animated counters, gradient mesh background                 │
-│   • Interactive chat, modals, comparison cards                  │
-│   • Plotly charts with custom theme                             │
-└─────────────────────────────────────────────────────────────────┘
-                               ↓
-┌─────────────────────────────────────────────────────────────────┐
-│                        DEPLOYMENT                               │
-│   HuggingFace Spaces (Docker runtime)                           │
-│   • Dockerfile installs deps and pre-downloads model            │
-│   • Git LFS for large parquet / FAISS files (~180 MB)           │
-│   • OPENAI_API_KEY stored as a Space secret                     │
-└─────────────────────────────────────────────────────────────────┘
+
+### Request-time RAG pipeline
+
+When a user types a question, this is the path the request takes:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as User (Browser)
+    participant D as Dash callback<br/>handle_chat()
+    participant R as rag.run_rag()
+    participant W as rewrite_query()<br/>(LLM call #1)
+    participant E as SentenceTransformer<br/>encoder
+    participant F as FAISS index<br/>(94K vectors)
+    participant DF as df_emb DataFrame<br/>(metadata join)
+    participant G as Generator<br/>(LLM call #2)
+
+    U->>D: "What do people hate about Kindle?"
+    D->>R: question, k=8
+    R->>W: rewrite question
+    W-->>R: {queries:[...], sentiment:"neg",<br/>product_hint:"kindle"}
+    loop for each query (1-3)
+        R->>E: encode(query)
+        E-->>R: 384-dim vector
+        R->>F: search(k=40)
+        F-->>R: top-40 (idx, score)
+    end
+    R->>R: merge by max score,<br/>rank, take top-40 candidates
+    R->>DF: lookup metadata
+    DF-->>R: rows (text, rating,<br/>product_title, image_url)
+    R->>R: apply filters<br/>(sentiment + product_hint)
+    R->>G: top-10 reviews +<br/>system prompt + question
+    G-->>R: grounded answer<br/>with (R3) citations
+    R-->>D: answer + source rows
+    D-->>U: rendered markdown +<br/>expandable source cards
 ```
+
+### Component map
+
+```mermaid
+flowchart TB
+    subgraph FRONT["🎨 Presentation (Plotly Dash)"]
+        APP[app.py<br/>layout + callback wiring]
+        COMP[components.py<br/>hero_stat, product_row,<br/>chart_panel, modal, footer]
+        CHARTS[charts.py<br/>sentiment_trend_fig<br/>price_bracket_fig<br/>sentiment_donut_fig<br/>product_trend_fig]
+        CSS[assets/style.css<br/>theme + animations]
+    end
+
+    subgraph LOGIC["🧠 Application Logic"]
+        RAG_MOD[rag.py<br/>rewrite_query<br/>retrieve<br/>run_rag<br/>generate_pros_cons<br/>summarize_chart<br/>compare_products]
+        DATA[data_loader.py<br/>loads parquet<br/>loads FAISS<br/>loads MiniLM<br/>computes summary stats]
+        CFG[config.py<br/>colors, layout consts,<br/>API model name, links]
+    end
+
+    subgraph DATAART["📦 Data Artifacts"]
+        PQ1[(electronics_emb.parquet<br/>~95K reviews + metadata)]
+        PQ2[(dash_top_products.parquet<br/>top 100 w/ images)]
+        PQ3[(dash_daily.parquet<br/>dash_brackets.parquet<br/>dash_reviews.parquet)]
+        FA[(electronics.faiss<br/>~140 MB index)]
+    end
+
+    subgraph EXT["☁️ External"]
+        OPENAI[OpenAI API<br/>gpt-4o-mini]
+        AMZ[Amazon CDN<br/>product images]
+    end
+
+    APP --> COMP
+    APP --> CHARTS
+    APP --> RAG_MOD
+    APP --> DATA
+    COMP --> CFG
+    CHARTS --> DATA
+    CHARTS --> CFG
+    RAG_MOD --> DATA
+    DATA --> PQ1
+    DATA --> PQ2
+    DATA --> PQ3
+    DATA --> FA
+    RAG_MOD --> OPENAI
+    APP -. img src .-> AMZ
+
+    style FRONT fill:#1a2332,stroke:#FF9900,color:#fff
+    style LOGIC fill:#1a2332,stroke:#F5C518,color:#fff
+    style DATAART fill:#1a2332,stroke:#00A862,color:#fff
+    style EXT fill:#1a2332,stroke:#6B7785,color:#fff
+```
+
+### Key design decisions
+
+| Decision | Why |
+|---|---|
+| **Streaming + filter for metadata, not bulk load** | Electronics metadata is ~1.6M rows. Bulk-loading blew out Databricks Serverless memory. Streaming with an in-flight asin filter keeps memory flat regardless of corpus size. |
+| **`IndexFlatIP` (brute-force), not `IndexIVF` / `IndexHNSW`** | At ~95K vectors, brute force is sub-second. ANN indexes only pay off above ~1M vectors and add tuning complexity. |
+| **Sentiment from star rating, not a sentiment model** | Star ratings are the ground truth a sentiment model would try to predict anyway. Free, deterministic, faster than running a classifier on every review. |
+| **LLM-driven query rewriting before retrieval** | Raw user questions ("what do people hate about kindle") are bad embedding queries. The rewriter extracts implicit filters (sentiment, product) and generates 1–3 optimized search phrases. |
+| **Multi-query retrieval, merged by max score** | One query embedding misses near-synonyms. Three queries + merge gives broader recall without the cost of a full HyDE-style approach. |
+| **Pre-aggregated parquets for the dashboard** | Computing daily sentiment trends over 95K rows on every page-load would be slow. Aggregating once at build time means the dashboard renders instantly. |
+| **HuggingFace Spaces over Render/Railway** | Free tier has 16 GB RAM (enough for the FAISS index + MiniLM + parquets in memory). Render's free tier (512 MB) wouldn't fit this app. |
+| **Git LFS for data, not external object storage** | Single-source-of-truth in the repo. `git clone + git lfs pull` and you have everything. Trade-off: LFS bandwidth limits at scale. |
 
 ---
 
