@@ -56,12 +56,16 @@ User Query
 
 ## Metrics
 
-- **Reviews indexed**: 95,000
-- **Embedding dimensions**: 384 (all-MiniLM-L6-v2)
-- **FAISS index size**: [check your index file size in MB]
-- **Retrieval latency p95**: [measure top-k search time]
-- **End-to-end response time p95**: [embed + retrieve + generate]
-- **Cost per query**: ~$[calculate from GPT-4o-mini token usage]
+- **Reviews indexed:** 94,671
+- **Embedding dimensions:** 384 (all-MiniLM-L6-v2)
+- **End-to-end latency p95:** 10.7s
+- **End-to-end latency median:** 6.9s
+- **Retrieval latency avg:** 67ms (embedding 29ms + FAISS 36ms)
+- **Embedding latency avg:** 29ms
+- **FAISS search latency avg:** 36ms
+- **Query rewriting latency avg:** 1.3s (GPT-4o-mini)
+- **Generation latency avg:** 6.0s (GPT-4o-mini, RAG context)
+- **Test queries:** 20 queries, 100% success rate
 
 ## Stack
 
