@@ -113,7 +113,7 @@ Example bad citation: "Users praise the glare-free screen [Review 4]."
     
     total_latency = time.time() - total_start
     
-    print(f"[METRIC] rewrite: {rewrite_latency*1000:.0f}ms | retrieve: {retrieve_latency*1000:.0f}ms | gen: {gen_latency*1000:.0f}ms | total: {total_latency*1000:.0f}ms")
+    print(f"[METRIC] rewrite: {rewrite_latency*1000:.0f}ms | retrieve: {retrieve_latency*1000:.0f}ms | gen: {gen_latency*1000:.0f}ms | total: {total_latency*1000:.0f}ms", flush=True)
     
     return resp.choices[0].message.content, hits
 
