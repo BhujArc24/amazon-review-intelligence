@@ -48,7 +48,24 @@ Plus a proper analytics dashboard showing sentiment trends over ~15 years, price
 
 ## Architecture
 
-The system has three runtime planes — an offline data pipeline that runs once in Databricks, a request-time RAG pipeline triggered by user interactions, and a presentation layer rendered in the browser. Below is the full component-level breakdown with the actual flow paths.
+User Query 
+  → SentenceTransformer (all-MiniLM-L6-v2, 384-dim embedding) 
+  → FAISS similarity search (top-k retrieval) 
+  → GPT-4o-mini (RAG generation) 
+  → Streamed response
+
+## Metrics
+
+- **Reviews indexed**: 95,000
+- **Embedding dimensions**: 384 (all-MiniLM-L6-v2)
+- **FAISS index size**: [check your index file size in MB]
+- **Retrieval latency p95**: [measure top-k search time]
+- **End-to-end response time p95**: [embed + retrieve + generate]
+- **Cost per query**: ~$[calculate from GPT-4o-mini token usage]
+
+## Stack
+
+FastAPI · SentenceTransformers · FAISS · GPT-4o-mini · Streamlit/HTML · Docker · HF Spaces
 
 ### High-level system
 
