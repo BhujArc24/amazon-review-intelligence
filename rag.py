@@ -30,13 +30,27 @@ Return JSON only:
 
 def retrieve(queries, k=40):
     """Multi-query semantic retrieval, merged by max score."""
+    import time
+    
     all_idx = {}
+    embed_total = 0
+    search_total = 0
+    
     for q in queries[:3]:
+        embed_start = time.time()
         qv = model.encode([q], normalize_embeddings=True).astype('float32')
+        embed_total += time.time() - embed_start
+        
+        search_start = time.time()
         D, I = index.search(qv, k)
+        search_total += time.time() - search_start
+        
         for idx, score in zip(I[0], D[0]):
             if idx not in all_idx or score > all_idx[idx]:
                 all_idx[idx] = float(score)
+    
+    print(f"[METRIC-DETAIL] embed: {embed_total*1000:.0f}ms | faiss: {search_total*1000:.0f}ms")
+    
     ranked = sorted(all_idx.items(), key=lambda x: -x[1])
     hits = df_emb.iloc[[i for i,_ in ranked]].copy()
     hits['score'] = [s for _,s in ranked]
@@ -44,12 +58,22 @@ def retrieve(queries, k=40):
 
 
 def run_rag(question, k=10):
+    import time
+    total_start = time.time()
+    
+    # Time query rewriting (first GPT call)
+    rewrite_start = time.time()
     plan = rewrite_query(question)
+    rewrite_latency = time.time() - rewrite_start
+    
     queries = plan.get('search_queries') or [question]
     sentiment = plan.get('sentiment','any')
     product_hint = plan.get('product_hint')
 
+    # Time retrieval (embed + FAISS search)
+    retrieve_start = time.time()
     hits = retrieve(queries, k=40)
+    retrieve_latency = time.time() - retrieve_start
 
     if sentiment in ('pos','neg'):
         hits = hits[hits['sentiment']==sentiment]
@@ -66,6 +90,8 @@ def run_rag(question, k=10):
         f"[Review {i+1}] Product: {r['product_title']} | Rating: {r['rating']}/5 | Sentiment: {r['sentiment']}\n{r['text'][:500]}"
         for i, (_, r) in enumerate(hits.iterrows())])
 
+    # Time generation (final GPT call)
+    gen_start = time.time()
     resp = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
@@ -83,6 +109,12 @@ Example bad citation: "Users praise the glare-free screen [Review 4]."
 """},
             {"role":"user","content":f"Question: {question}\n\nReviews:\n{context}"}
         ], temperature=0.2)
+    gen_latency = time.time() - gen_start
+    
+    total_latency = time.time() - total_start
+    
+    print(f"[METRIC] rewrite: {rewrite_latency*1000:.0f}ms | retrieve: {retrieve_latency*1000:.0f}ms | gen: {gen_latency*1000:.0f}ms | total: {total_latency*1000:.0f}ms")
+    
     return resp.choices[0].message.content, hits
 
 
